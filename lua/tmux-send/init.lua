@@ -3,12 +3,7 @@ local Path = require('plenary.path')
 -- local uv = vim.uv
 local M = {}
 
--- TODO: fig out best way to pass around the same, constant pane ID upon
--- pane its creation? or just how to manage the target pane even if other ones created, whether by plugin
--- or user interacting directly w/ tmux
---
 -- TODO: allow -L or -S config ?
-
 M.__target_pane = nil
 M.__venv_cmd = 'source ./.venv/bin/activate'
 
@@ -83,7 +78,7 @@ function M.create_pane(split_dir, split_pos, pane_size)
 end
 
 ---@return nil
-function M.del_pane()
+function M.delete_pane()
     -- TODO: worth it to also kill any potential REPL running here?
     if target_pane_exists() then
         local cmd = string.format('tmux kill-pane -t %s', M.__target_pane)
@@ -113,7 +108,6 @@ end
 ---@return nil
 function M.start_repl()
     if not target_pane_exists() then
-        -- print('Creating target pane')
         local pane = M.create_pane()
     end
 
@@ -183,21 +177,49 @@ function M.run_curr_buf(args)
     M.send_keys(keys, false) -- this doesn't get run if active_venv() run just before...
 end
 
--- vim.cmd('messages clear')
--- M.send_keys('echo hi, mom')
--- local out = M.get_panes()
--- print(vim.inspect(out))
--- vim.cmd('sleep 2')
--- M.del_pane()
-
 ---Setup func
 ---@param config table | nil
 function M.setup(config)
     local default_config = {}
     M.config = vim.tbl_deep_extend('force', default_config, config or {})
-    -- vim.api.nvim_create_user_command('Transparent', function()
-    --     Transp()
-    -- end, { desc = 'Make nvim transparent' })
+
+    -- wrap into a single user command with each sub command as args with completion?
+    -- how to pass additional args to something like M.create_pane()?
+    vim.api.nvim_create_user_command('TmuxCreate', function(opts)
+        local cmd = tostring(opts.fargs[1])
+        if cmd == 'create_pane' then
+            M.create_pane()
+        elseif cmd == 'delete_pane' then
+            M.delete_pane()
+        elseif cmd == 'run_buf' then
+            M.run_curr_buf()
+        end
+    end, {
+        nargs = 1,
+        complete = function(ArgLead, CmdLine, CursorPos)
+            return {
+                'create_pane',
+                'delete_pane',
+                'run_buf',
+            }
+        end,
+        desc = 'Tmux interaction',
+    })
+    -- vim.api.nvim_create_user_command('Bg', function(opts)
+    --     local bg_profile = tostring(opts.fargs[1])
+    --     wezterm_config.set_wezterm_user_var('profile_background', bg_profile)
+    -- end, {
+    --     nargs = 1,
+    --     complete = function(ArgLead, CmdLine, CursorPos)
+    --         local bg_names = {}
+    --         for name, _ in pairs(profile_data.background) do
+    --             table.insert(bg_names, name)
+    --         end
+    --         table.sort(bg_names)
+    --         return bg_names
+    --     end,
+    --     desc = 'Set Wezterm background',
+    -- })
 end
 
 return M
