@@ -19,11 +19,6 @@ end
 
 ---@return nil
 local function activate_venv()
-    -- NOTE: the problem with calling "pipenv shell" is that it runs
-    -- a source command on the next line which I think consumes the
-    -- immediately following tmux send-keys command somehow
-    -- is it fine to just hard code command assuming .venv/bin/activate is desired?
-    -- maybe can use plenary.scandir for configuration
     local ft = vim.api.nvim_get_option_value('filetype', { buf = 0 })
     if ft == 'python' then
         -- NOTE: currently not capturing $VIRTUAL_ENV output properly
@@ -187,7 +182,9 @@ function M.setup(config)
     -- how to pass additional args to something like M.create_pane()?
     vim.api.nvim_create_user_command('TmuxCreate', function(opts)
         local cmd = tostring(opts.fargs[1])
-        if cmd == 'create_pane' then
+        if cmd == 'get_panes' then
+            print(vim.inspect(M.get_panes()))
+        elseif cmd == 'create_pane' then
             M.create_pane()
         elseif cmd == 'delete_pane' then
             M.delete_pane()
@@ -198,6 +195,7 @@ function M.setup(config)
         nargs = 1,
         complete = function(ArgLead, CmdLine, CursorPos)
             return {
+                'get_panes',
                 'create_pane',
                 'delete_pane',
                 'run_buf',
