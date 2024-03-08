@@ -1,9 +1,9 @@
 local Path = require('plenary.path')
 -- local scan = require('plenary.scandir')
--- local uv = vim.uv
 local M = {}
 
 -- TODO: allow -L or -S config ?
+-- NOTE: {last} lets you target last pane
 M.__target_pane = nil
 M.__venv_cmd = 'source ./.venv/bin/activate'
 
@@ -13,21 +13,25 @@ local function target_pane_exists()
     local panes = M.get_panes()
     if M.__target_pane ~= nil and vim.tbl_contains(panes, M.__target_pane) then
         return true
+    else
+        M.__target_pane = nil
+        return false
     end
-    return false
 end
 
 ---@return nil
 local function activate_venv()
-    local ft = vim.api.nvim_get_option_value('filetype', { buf = 0 })
-    if ft == 'python' then
-        -- NOTE: currently not capturing $VIRTUAL_ENV output properly
-        -- local venv = vim.fn.system('echo \\$VIRTUAL_ENV')
-        -- if venv ~= '' then
-        --     print('venv is active')
-        -- else
-        --     print('venv is inactive')
-        M.send_keys(M.__venv_cmd, false) -- venv activation command
+    if target_pane_exists() then
+        local ft = vim.api.nvim_get_option_value('filetype', { buf = 0 })
+        if ft == 'python' then
+            -- NOTE: currently not capturing $VIRTUAL_ENV output properly
+            -- local venv = vim.fn.system('echo \\$VIRTUAL_ENV')
+            -- if venv ~= '' then
+            --     print('venv is active')
+            -- else
+            --     print('venv is inactive')
+            M.send_keys(M.__venv_cmd, false) -- venv activation command
+        end
     end
 end
 
@@ -89,7 +93,14 @@ end
 ---@return nil
 function M.send_keys(keys, cmd_mode)
     cmd_mode = cmd_mode or false
-    -- TODO: prob shouldn't handle the check here? make the func that calls this check
+    -- TODO: prob shouldn't handle the checking for pane here? make the func that calls this check?
+    -- alternatively the check occurs here and then it's just a single point of checking?
+    -- and simply print error or message if the target pane doesn't exist?
+
+    -- TODO: need to figure out all the string esc; eventually can be its own func
+    -- are there any other problematic keys?
+    -- look at vim.api.nvim_replace_termcodes()
+    keys = keys:gsub('"', '\\"')
     local cmd
     if cmd_mode == false then
         -- need "" around %s for keys so tmux doesn't consume the spaces
@@ -97,19 +108,23 @@ function M.send_keys(keys, cmd_mode)
     else
         cmd = string.format('tmux send-keys -t %s %s', M.__target_pane, keys)
     end
+    -- print(cmd)
     vim.fn.system(cmd)
 end
 
 ---@return nil
 function M.start_repl()
+    -- TODO: need to check if REPL already exists? is even possible?
     if not target_pane_exists() then
         local pane = M.create_pane()
     end
 
     local repl_cmd
     local ft = vim.api.nvim_get_option_value('filetype', { buf = 0 })
-    -- TODO: check first for python venv? if renv, check that it initialized?
+    -- TODO: check first for python venv?
+    -- for R, can look for renv dir and the activate.R script?
     if ft == 'python' then
+        activate_venv()
         repl_cmd = 'python3'
     elseif ft == 'r' then
         repl_cmd = 'R'
@@ -121,6 +136,7 @@ end
 function M.stop_repl()
     local ft = vim.api.nvim_get_option_value('filetype', { buf = 0 })
     if target_pane_exists() then
+        -- TODO: do we really need to make this lang specific? maybe should just kill the pane in general...
         if ft == 'python' or ft == 'r' then
             M.send_keys('C-d', true) -- better to send this?
             -- M.send_keys('exit()', false) -- better to send this ?
@@ -131,6 +147,36 @@ function M.stop_repl()
         --     print("Target pane doesn't exist")
     end
 end
+
+---@return nil
+function M.send_curr_line()
+    if target_pane_exists() then
+        local line = vim.api.nvim_get_current_line()
+        M.send_keys(line, false)
+        -- TODO: after selection is sent, leave visual line mode?
+        -- optionally can highlight the lines? italics?
+    end
+end
+
+---@return nil
+function M.send_vis_sel()
+    local _, ls, cs = unpack(vim.fn.getpos('v'))
+    local _, le, ce = unpack(vim.fn.getpos('.'))
+    -- TODO: this returns table of each line in the vis sel
+    -- only works with whole lines, which I think is pref
+    local lines = vim.api.nvim_buf_get_lines(0, ls - 1, le, true)
+    -- TODO: figure out how to execute lines
+    -- for something like a func defn or for loop that spans multiple lines
+    -- is just adding a final '\n' sufficient?
+    lines = table.concat(lines, '\n') .. '\n'
+    M.send_keys(lines, false)
+    -- TODO: read more about these 2 funcs
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', true)
+end
+
+vim.keymap.set('v', '<leader>ss', function()
+    M.send_vis_sel()
+end)
 
 ---@param args table | nil
 ---@return nil
@@ -160,6 +206,8 @@ function M.run_curr_buf(args)
         end
     else
         -- unpack the args and just pass them with spaces between
+        -- TODO: maybe it's easier from user pov to just pass a single string of the
+        -- args rather than in table form?
         local args_str = table.concat(args, ' ')
         if ft == 'python' then
             keys = string.format('python3 %s %s', buf_rel, args_str)
