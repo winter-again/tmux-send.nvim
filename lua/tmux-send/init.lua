@@ -125,7 +125,8 @@ function M.start_repl()
     -- for R, can look for renv dir and the activate.R script?
     if ft == 'python' then
         activate_venv()
-        repl_cmd = 'python3'
+        -- repl_cmd = 'python3'
+        repl_cmd = 'python'
     elseif ft == 'r' then
         repl_cmd = 'R'
     end
@@ -200,7 +201,8 @@ function M.run_curr_buf(args)
     local keys
     if vim.tbl_isempty(args) then
         if ft == 'python' then
-            keys = string.format('python3 %s', buf_rel)
+            -- keys = string.format('python3 %s', buf_rel)
+            keys = string.format('python %s', buf_rel)
         elseif ft == 'r' then
             keys = string.format('Rscript %s', buf_rel)
         end
@@ -210,7 +212,8 @@ function M.run_curr_buf(args)
         -- args rather than in table form?
         local args_str = table.concat(args, ' ')
         if ft == 'python' then
-            keys = string.format('python3 %s %s', buf_rel, args_str)
+            -- keys = string.format('python3 %s %s', buf_rel, args_str)
+            keys = string.format('python %s %s', buf_rel, args_str)
         elseif ft == 'r' then
             keys = string.format('Rscript %s %s', buf_rel, args_str)
         end
